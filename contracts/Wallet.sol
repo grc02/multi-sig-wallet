@@ -1,9 +1,13 @@
+// SPDX-License-Identifier: MIT
 pragma solidity 0.6.0;
 pragma experimental ABIEncoderV2;
 
+// approvers - ["0x5B38Da6a701c568545dCfcB03FcB875f56beddC4","0xAb8483F64d9C6d1EcF9b849Ae677dD3315835cb2","0x4B20993Bc481177ec7E8f571ceCaE8A9e22C02db","0x78731D3Ca6b7E34aC0F824c42a7cC18A495cabaB","0x78731D3Ca6b7E34aC0F824c42a7cC18A495cabaB"]
+
 contract Wallet {
-    address[] public approvers;
+    address[] approvers;
     uint256 public quorum;
+
     struct Transfer {
         uint256 id;
         uint256 amount;
@@ -11,12 +15,13 @@ contract Wallet {
         uint256 approvals;
         bool sent;
     }
-    Transfer[] public transfers;
+
+    Transfer[] transfers;
     mapping(address => mapping(uint256 => bool)) public approvals;
 
-    constructor(address[] memory _approvers, uint256 _quorum) public {
+    constructor(address[] memory _approvers) {
         approvers = _approvers;
-        quorum = _quorum;
+        quorum = (approvers.length + 1) / 2;
     }
 
     function getApprovers() external view returns (address[] memory) {
@@ -31,14 +36,19 @@ contract Wallet {
         external
         onlyApprover
     {
-        transfers.push(Transfer(transfers.length, amount, to, 0, false));
+        transfers.push(
+            Transfer(transfers.length, amount * (10**18), to, 0, false)
+        );
     }
 
     function approveTransfer(uint256 id) external onlyApprover {
-        require(transfers[id].sent == false, "transfer has already been sent");
         require(
-            approvals[msg.sender][id] == false,
-            "cannot approve transfer twice"
+            transfers[id].sent != true,
+            "This transfer has already been sent!"
+        );
+        require(
+            approvals[msg.sender][id] != true,
+            "Cannot approve a single transfer twice"
         );
 
         approvals[msg.sender][id] = true;
@@ -48,7 +58,7 @@ contract Wallet {
             transfers[id].sent = true;
             address payable to = transfers[id].to;
             uint256 amount = transfers[id].amount;
-            to.transfer(amount);
+            to.call(abi.encode(amount));
         }
     }
 
@@ -56,12 +66,15 @@ contract Wallet {
 
     modifier onlyApprover() {
         bool allowed = false;
+
         for (uint256 i = 0; i < approvers.length; i++) {
-            if (approvers[i] == msg.sender) {
+            if (msg.sender == approvers[i]) {
                 allowed = true;
+                break;
             }
         }
-        require(allowed == true, "only approver allowed");
+
+        require(allowed == true, "Only approver allowed");
         _;
     }
 }
